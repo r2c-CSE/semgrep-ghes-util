@@ -819,7 +819,7 @@ def cmd_scm_onboard_repos(args: argparse.Namespace) -> None:
         try:
             updated = semgrep_client.bulk_update_repos(
                 repo_ids=batch,
-                enable_diff_scan=False,  # Hardcoded to disabled for now
+                enable_diff_scan=args.diff_scan,
                 enable_full_scan=args.full_scan,
             )
             all_updated.extend(updated)
