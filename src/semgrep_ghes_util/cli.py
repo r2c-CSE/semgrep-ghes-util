@@ -171,7 +171,9 @@ def cmd_scm_list_missing_configs(args: argparse.Namespace) -> None:
 def cmd_scm_create_config(args: argparse.Namespace) -> None:
     """Create a single Semgrep SCM config for one GHES org."""
     semgrep_token = get_env_or_exit("SEMGREP_APP_TOKEN")
-    ghes_token = get_env_or_exit("GHES_TOKEN")
+    if not args.ghes_token:
+        print("Error: GHES token is required. Use --ghes-token or set GHES_TOKEN env var.", file=sys.stderr)
+        sys.exit(1)
 
     print(f"GHES: {args.ghes_url}")
     print(f"Org: {args.ghes_org}\n")
@@ -193,7 +195,7 @@ def cmd_scm_create_config(args: argparse.Namespace) -> None:
             scm_type=ScmType.GITHUB_ENTERPRISE,
             namespace=args.ghes_org,
             base_url=args.ghes_url,
-            access_token=ghes_token,
+            access_token=args.ghes_token,
             subscribe=args.subscribe,
             auto_scan=args.auto_scan,
             diff_enabled=args.diff_enabled,
@@ -231,12 +233,14 @@ def cmd_scm_create_config(args: argparse.Namespace) -> None:
 def cmd_scm_create_missing_configs(args: argparse.Namespace) -> None:
     """Create Semgrep SCM configs for GHES orgs not yet onboarded."""
     semgrep_token = get_env_or_exit("SEMGREP_APP_TOKEN")
-    ghes_token = get_env_or_exit("GHES_TOKEN")
+    if not args.ghes_token:
+        print("Error: GHES token is required. Use --ghes-token or set GHES_TOKEN env var.", file=sys.stderr)
+        sys.exit(1)
 
     print(f"GHES: {args.ghes_url}\n")
 
     # Fetch GHES orgs and Semgrep configs
-    github_client = GithubClient(args.ghes_url, ghes_token)
+    github_client = GithubClient(args.ghes_url, args.ghes_token)
     semgrep_client = SemgrepClient(semgrep_token)
 
     ghes_orgs = github_client.list_organizations()
@@ -301,7 +305,7 @@ def cmd_scm_create_missing_configs(args: argparse.Namespace) -> None:
     if args.scm_id:
         print(f"Using token from SCM ID: {args.scm_id}\n")
     else:
-        print("Using GHES_TOKEN for each org\n")
+        print("Using GHES token for each org\n")
 
     created = 0
     failed = 0
@@ -326,7 +330,7 @@ def cmd_scm_create_missing_configs(args: argparse.Namespace) -> None:
                     scm_type=ScmType.GITHUB_ENTERPRISE,
                     namespace=org.login,
                     base_url=args.ghes_url,
-                    access_token=ghes_token,
+                    access_token=args.ghes_token,
                     subscribe=args.subscribe,
                     auto_scan=args.auto_scan,
                     diff_enabled=args.diff_enabled,
@@ -371,7 +375,8 @@ def cmd_scm_update_configs(args: argparse.Namespace) -> None:
     normalized_ghes_url = args.ghes_url.rstrip("/").lower()
     matching_configs = [
         config for config in all_configs
-        if config.base_url and config.base_url.rstrip("/").lower() == normalized_ghes_url
+        if config.type == ScmType.GITHUB_ENTERPRISE.value
+        and config.base_url and config.base_url.rstrip("/").lower() == normalized_ghes_url
     ]
 
     # Optionally filter by org names
@@ -387,22 +392,24 @@ def cmd_scm_update_configs(args: argparse.Namespace) -> None:
         return
 
     # Build update payload from provided flags
-    updates: dict[str, bool | None] = {
+    updates: dict[str, bool | str | None] = {
         "subscribe": args.subscribe,
         "auto_scan": args.auto_scan,
         "use_network_broker": args.use_network_broker,
         "diff_enabled": args.diff_enabled,
+        "access_token": args.ghes_token,
     }
 
     # Filter to only non-None values
     updates_to_apply = {k: v for k, v in updates.items() if v is not None}
 
     if not updates_to_apply:
-        print("No updates specified. Use flags like --subscribe true to specify updates.")
+        print("No updates specified. Use flags like --subscribe true or --ghes-token to specify updates.")
         return
 
     print(f"Found {len(matching_configs)} matching config(s).")
-    print(f"Updates to apply: {updates_to_apply}\n")
+    display_updates = {k: ("***" if k == "access_token" else v) for k, v in updates_to_apply.items()}
+    print(f"Updates to apply: {display_updates}\n")
 
     if args.dry_run:
         print("Dry-run mode - the following configs would be updated:\n")
@@ -418,6 +425,7 @@ def cmd_scm_update_configs(args: argparse.Namespace) -> None:
         try:
             semgrep_client.patch_scm_config(
                 config_id=config.id,
+                access_token=args.ghes_token,
                 subscribe=args.subscribe,
                 auto_scan=args.auto_scan,
                 use_network_broker=args.use_network_broker,
@@ -973,6 +981,170 @@ def cmd_scm_trigger_scans(args: argparse.Namespace) -> None:
         print(f"\nDone. Checked: {checked_count}, Triggered: {triggered_count}, Skipped: {skipped_count}, Failed: {failed_count}")
 
 
+# GitLab Self-Managed commands
+def cmd_glsm_create_configs(args: argparse.Namespace) -> None:
+    """Create Semgrep SCM configs for GitLab Self-Managed groups."""
+    semgrep_token = get_env_or_exit("SEMGREP_APP_TOKEN")
+    if not args.glsm_token:
+        print("Error: GitLab token is required. Use --glsm-token or set GLSM_TOKEN env var.", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"GitLab Self-Managed: {args.glsm_url}\n")
+
+    # Read group names from args or file
+    if args.groups:
+        group_names = args.groups
+    else:
+        group_names = [
+            line.strip() for line in args.groups_file
+            if line.strip() and not line.strip().startswith("#")
+        ]
+        args.groups_file.close()
+
+    if not group_names:
+        print("No group names provided.")
+        return
+
+    if args.dry_run:
+        print("Dry-run mode - the following SCM configs would be created:\n")
+        print(f"Settings: subscribe={args.subscribe}, auto_scan={args.auto_scan}, diff_enabled={args.diff_enabled}\n")
+        for group in group_names:
+            print(f"  {group}")
+        print(f"\nTotal: {len(group_names)} config(s) would be created.")
+        return
+
+    semgrep_client = SemgrepClient(semgrep_token)
+
+    created = 0
+    failed = 0
+    unhealthy = 0
+
+    for i, group_name in enumerate(group_names):
+        try:
+            config = semgrep_client.create_scm_config(
+                scm_type=ScmType.GITLAB_SELFMANAGED,
+                namespace=group_name,
+                base_url=args.glsm_url,
+                access_token=args.glsm_token,
+                subscribe=args.subscribe,
+                auto_scan=args.auto_scan,
+                diff_enabled=args.diff_enabled,
+            )
+
+            try:
+                result = semgrep_client.check_scm_config(config_id=config.id)
+                if result.status.ok:
+                    print(f"  ✓ Created: {group_name} (connected)")
+                else:
+                    error = result.status.error or "connection failed"
+                    print(f"  ⚠ Created: {group_name} ({error})")
+                    unhealthy += 1
+            except Exception:
+                print(f"  ✓ Created: {group_name} (health check failed)")
+
+            created += 1
+
+        except Exception as e:
+            print(f"  ✗ Failed: {group_name} - {e}")
+            failed += 1
+
+        if args.delay > 0 and i < len(group_names) - 1:
+            time.sleep(args.delay)
+
+    print()
+    print(f"Done. Created: {created} ({unhealthy} not connected), Failed: {failed}")
+
+
+def cmd_glsm_update_configs(args: argparse.Namespace) -> None:
+    """Update Semgrep SCM configs for GitLab Self-Managed groups."""
+    semgrep_token = get_env_or_exit("SEMGREP_APP_TOKEN")
+
+    print(f"GitLab Self-Managed: {args.glsm_url}\n")
+
+    semgrep_client = SemgrepClient(semgrep_token)
+
+    # Get all configs and filter by type + URL
+    all_configs = semgrep_client.list_scm_configs()
+    normalized_glsm_url = args.glsm_url.rstrip("/").lower()
+    matching_configs = [
+        config for config in all_configs
+        if config.type == ScmType.GITLAB_SELFMANAGED.value
+        and config.base_url and config.base_url.rstrip("/").lower() == normalized_glsm_url
+    ]
+
+    # Optionally filter by group names
+    group_names: list[str] | None = None
+    if args.groups:
+        group_names = args.groups
+    elif args.groups_file:
+        group_names = [
+            line.strip() for line in args.groups_file
+            if line.strip() and not line.strip().startswith("#")
+        ]
+        args.groups_file.close()
+
+    if group_names:
+        group_names_lower = {g.lower() for g in group_names}
+        matching_configs = [
+            config for config in matching_configs
+            if config.namespace.lower() in group_names_lower
+        ]
+
+    if not matching_configs:
+        print("No matching SCM configs found.")
+        return
+
+    updates: dict[str, bool | str | None] = {
+        "subscribe": args.subscribe,
+        "auto_scan": args.auto_scan,
+        "use_network_broker": args.use_network_broker,
+        "diff_enabled": args.diff_enabled,
+        "access_token": args.glsm_token,
+    }
+    updates_to_apply = {k: v for k, v in updates.items() if v is not None}
+
+    if not updates_to_apply:
+        print("No updates specified. Use flags like --subscribe true or --glsm-token to specify updates.")
+        return
+
+    print(f"Found {len(matching_configs)} matching config(s).")
+    display_updates = {k: ("***" if k == "access_token" else v) for k, v in updates_to_apply.items()}
+    print(f"Updates to apply: {display_updates}\n")
+
+    if args.dry_run:
+        print("Dry-run mode - the following configs would be updated:\n")
+        for config in matching_configs:
+            print(f"  {config.namespace} (ID: {config.id})")
+        print(f"\nTotal: {len(matching_configs)} config(s) would be updated.")
+        return
+
+    updated = 0
+    failed = 0
+
+    for i, config in enumerate(matching_configs):
+        try:
+            semgrep_client.patch_scm_config(
+                config_id=config.id,
+                access_token=args.glsm_token,
+                subscribe=args.subscribe,
+                auto_scan=args.auto_scan,
+                use_network_broker=args.use_network_broker,
+                diff_enabled=args.diff_enabled,
+            )
+            print(f"  ✓ Updated: {config.namespace}")
+            updated += 1
+
+        except Exception as e:
+            print(f"  ✗ Failed: {config.namespace} - {e}")
+            failed += 1
+
+        if args.delay > 0 and i < len(matching_configs) - 1:
+            time.sleep(args.delay)
+
+    print()
+    print(f"Done. Updated: {updated}, Failed: {failed}")
+
+
 # GHES commands
 def cmd_ghes_list_orgs(args: argparse.Namespace) -> None:
     """List all organizations on GHES."""
@@ -996,6 +1168,11 @@ def cmd_ghes_list_orgs(args: argparse.Namespace) -> None:
 def main():
     load_dotenv()
 
+    # Deprecated alias: redirect `scm` to `ghes`
+    if len(sys.argv) > 1 and sys.argv[1] == "scm":
+        print("Warning: 'scm' is deprecated, use 'ghes' instead.", file=sys.stderr)
+        sys.argv[1] = "ghes"
+
     parser = argparse.ArgumentParser(
         prog="semgrep-ghes-util",
         description="Tools for managing Semgrep SCM configs with GitHub Enterprise Server",
@@ -1013,21 +1190,28 @@ def main():
             help="GitHub Enterprise Server URL (e.g., https://github.example.com). Can also be set via GHES_URL env var.",
         )
 
-    # SCM command group
-    scm_parser = subparsers.add_parser("scm", help="Semgrep SCM config operations")
-    scm_subparsers = scm_parser.add_subparsers(dest="scm_command", required=True)
+    # GHES command group
+    ghes_parser = subparsers.add_parser("ghes", help="GitHub Enterprise Server operations")
+    ghes_subparsers = ghes_parser.add_subparsers(dest="ghes_command", required=True)
 
-    scm_list_configs = scm_subparsers.add_parser(
+    ghes_list_orgs = ghes_subparsers.add_parser(
+        "list-orgs",
+        help="List all organizations on GHES",
+    )
+    add_ghes_url_arg(ghes_list_orgs, required=True)
+    ghes_list_orgs.set_defaults(func=cmd_ghes_list_orgs)
+
+    ghes_list_configs = ghes_subparsers.add_parser(
         "list-configs",
         help="List all Semgrep SCM configs",
     )
-    add_ghes_url_arg(scm_list_configs, required=False)
-    scm_list_configs.add_argument(
+    add_ghes_url_arg(ghes_list_configs, required=False)
+    ghes_list_configs.add_argument(
         "--unhealthy-only",
         action="store_true",
         help="Only show unhealthy SCM configs.",
     )
-    scm_list_configs.add_argument(
+    ghes_list_configs.add_argument(
         "--required-scopes",
         type=parse_scopes,
         metavar="SCOPES",
@@ -1035,54 +1219,66 @@ def main():
              "If not specified, only connection status is checked. "
              f"Valid scopes: {', '.join(ScmTokenScopes.ALL_SCOPES)}",
     )
-    scm_list_configs.set_defaults(func=cmd_scm_list_configs)
+    ghes_list_configs.set_defaults(func=cmd_scm_list_configs)
 
-    scm_list_missing = scm_subparsers.add_parser(
+    ghes_list_missing = ghes_subparsers.add_parser(
         "list-missing-configs",
         help="List GHES orgs not onboarded to Semgrep",
     )
-    add_ghes_url_arg(scm_list_missing, required=True)
-    scm_list_missing.set_defaults(func=cmd_scm_list_missing_configs)
+    add_ghes_url_arg(ghes_list_missing, required=True)
+    ghes_list_missing.set_defaults(func=cmd_scm_list_missing_configs)
 
-    scm_create_config = scm_subparsers.add_parser(
+    ghes_create_config = ghes_subparsers.add_parser(
         "create-config",
         help="Create a single SCM config for one GHES org",
     )
-    add_ghes_url_arg(scm_create_config, required=True)
-    scm_create_config.add_argument(
+    add_ghes_url_arg(ghes_create_config, required=True)
+    ghes_create_config.add_argument(
+        "--ghes-token",
+        default=os.environ.get("GHES_TOKEN"),
+        metavar="TOKEN",
+        help="GitHub Enterprise Server personal access token. Can also be set via GHES_TOKEN env var.",
+    )
+    ghes_create_config.add_argument(
         "--ghes-org",
         required=True,
         metavar="ORG",
         help="Organization name to create config for.",
     )
-    scm_create_config.add_argument(
+    ghes_create_config.add_argument(
         "--dry-run",
         action="store_true",
         help="Print what would be created without making any changes.",
     )
-    scm_create_config.add_argument(
+    ghes_create_config.add_argument(
         "--subscribe",
         action="store_true",
         help="Subscribe to webhooks (default: disabled).",
     )
-    scm_create_config.add_argument(
+    ghes_create_config.add_argument(
         "--auto-scan",
         action="store_true",
         help="Enable auto-scanning (default: disabled).",
     )
-    scm_create_config.add_argument(
+    ghes_create_config.add_argument(
         "--diff-enabled",
         action="store_true",
         help="Enable diff scanning (default: disabled).",
     )
-    scm_create_config.set_defaults(func=cmd_scm_create_config)
+    ghes_create_config.set_defaults(func=cmd_scm_create_config)
 
-    scm_create_missing = scm_subparsers.add_parser(
+    ghes_create_missing = ghes_subparsers.add_parser(
         "create-missing-configs",
         help="Create SCM configs for GHES orgs not yet onboarded",
     )
-    add_ghes_url_arg(scm_create_missing, required=True)
-    orgs_group = scm_create_missing.add_mutually_exclusive_group()
+    add_ghes_url_arg(ghes_create_missing, required=True)
+    ghes_create_missing.add_argument(
+        "--ghes-token",
+        default=os.environ.get("GHES_TOKEN"),
+        metavar="TOKEN",
+        help="GitHub Enterprise Server personal access token. Can also be set via GHES_TOKEN env var.",
+    )
+    orgs_group = ghes_create_missing.add_mutually_exclusive_group()
     orgs_group.add_argument(
         "--orgs",
         nargs="+",
@@ -1095,102 +1291,107 @@ def main():
         metavar="FILE",
         help="File containing org names (one per line).",
     )
-    scm_create_missing.add_argument(
+    ghes_create_missing.add_argument(
         "--scm-id",
         type=int,
         metavar="ID",
-        help="SCM ID of an existing config to reuse token from. Get this from 'scm create-config'.",
+        help="SCM ID of an existing config to reuse token from. Get this from 'ghes create-config'.",
     )
-    scm_create_missing.add_argument(
+    ghes_create_missing.add_argument(
         "--dry-run",
         action="store_true",
         help="Print what would be created without making any changes.",
     )
-    scm_create_missing.add_argument(
+    ghes_create_missing.add_argument(
         "--delay",
         type=float,
         default=1.0,
         metavar="SECONDS",
         help="Delay between creating each config (default: 1.0 seconds).",
     )
-    scm_create_missing.add_argument(
+    ghes_create_missing.add_argument(
         "--subscribe",
         action="store_true",
         help="Subscribe to webhooks (default: disabled).",
     )
-    scm_create_missing.add_argument(
+    ghes_create_missing.add_argument(
         "--auto-scan",
         action="store_true",
         help="Enable auto-scanning (default: disabled).",
     )
-    scm_create_missing.add_argument(
+    ghes_create_missing.add_argument(
         "--diff-enabled",
         action="store_true",
         help="Enable diff scanning (default: disabled).",
     )
-    scm_create_missing.set_defaults(func=cmd_scm_create_missing_configs)
+    ghes_create_missing.set_defaults(func=cmd_scm_create_missing_configs)
 
-    scm_update_configs = scm_subparsers.add_parser(
+    ghes_update_configs = ghes_subparsers.add_parser(
         "update-configs",
         help="Update SCM configs matching the GHES URL",
     )
-    add_ghes_url_arg(scm_update_configs, required=True)
-    scm_update_configs.add_argument(
+    add_ghes_url_arg(ghes_update_configs, required=True)
+    ghes_update_configs.add_argument(
         "--orgs",
         nargs="+",
         metavar="ORG",
         help="Specific org names to update (if not provided, updates all matching GHES URL).",
     )
-    scm_update_configs.add_argument(
+    ghes_update_configs.add_argument(
         "--subscribe",
         type=parse_bool,
         metavar="BOOL",
         help="Set subscribe to webhooks (true/false).",
     )
-    scm_update_configs.add_argument(
+    ghes_update_configs.add_argument(
         "--auto-scan",
         type=parse_bool,
         metavar="BOOL",
         help="Set auto-scan enabled (true/false).",
     )
-    scm_update_configs.add_argument(
+    ghes_update_configs.add_argument(
         "--use-network-broker",
         type=parse_bool,
         metavar="BOOL",
         help="Set use network broker (true/false).",
     )
-    scm_update_configs.add_argument(
+    ghes_update_configs.add_argument(
         "--diff-enabled",
         type=parse_bool,
         metavar="BOOL",
         help="Set diff scanning enabled (true/false).",
     )
-    scm_update_configs.add_argument(
+    ghes_update_configs.add_argument(
+        "--ghes-token",
+        metavar="TOKEN",
+        help="New access token to set on matching SCM configs.",
+    )
+    ghes_update_configs.add_argument(
         "--dry-run",
         action="store_true",
         help="Print what would be updated without making any changes.",
     )
-    scm_update_configs.add_argument(
+    ghes_update_configs.add_argument(
         "--delay",
         type=float,
         default=1.0,
         metavar="SECONDS",
         help="Delay between updating each config (default: 1.0 seconds).",
     )
-    scm_update_configs.set_defaults(func=cmd_scm_update_configs)
+    ghes_update_configs.set_defaults(func=cmd_scm_update_configs)
 
-    scm_check_configs = scm_subparsers.add_parser(
+    ghes_check_configs = ghes_subparsers.add_parser(
         "check-configs",
         help="Check the health of SCM configs matching the GHES URL",
     )
-    add_ghes_url_arg(scm_check_configs, required=True)
-    scm_check_configs.add_argument(
+    add_ghes_url_arg(ghes_check_configs, required=True)
+    ghes_check_configs.add_argument(
         "--orgs",
         nargs="+",
         metavar="ORG",
         help="Specific org names to check (if not provided, checks all matching GHES URL).",
     )
-    scm_check_configs.add_argument(
+    ghes_check_configs.add_argument(
         "--required-scopes",
         type=parse_scopes,
         metavar="SCOPES",
@@ -1198,80 +1399,80 @@ def main():
              "If not specified, only connection status is checked. "
              f"Valid scopes: {', '.join(ScmTokenScopes.ALL_SCOPES)}",
     )
-    scm_check_configs.add_argument(
+    ghes_check_configs.add_argument(
         "--delay",
         type=float,
         default=0.25,
         metavar="SECONDS",
         help="Delay between checking each config (default: 0.25 seconds).",
     )
-    scm_check_configs.set_defaults(func=cmd_scm_check_configs)
+    ghes_check_configs.set_defaults(func=cmd_scm_check_configs)
 
-    scm_delete_configs = scm_subparsers.add_parser(
+    ghes_delete_configs = ghes_subparsers.add_parser(
         "delete-configs",
         help="Delete SCM configs matching the GHES URL",
     )
-    add_ghes_url_arg(scm_delete_configs, required=True)
-    scm_delete_configs.add_argument(
+    add_ghes_url_arg(ghes_delete_configs, required=True)
+    ghes_delete_configs.add_argument(
         "--orgs",
         nargs="+",
         metavar="ORG",
         required=True,
         help="Org names to delete (required to prevent accidental deletion).",
     )
-    scm_delete_configs.add_argument(
+    ghes_delete_configs.add_argument(
         "--dry-run",
         action="store_true",
         help="Print what would be deleted without making any changes.",
     )
-    scm_delete_configs.add_argument(
+    ghes_delete_configs.add_argument(
         "--delay",
         type=float,
         default=0.5,
         metavar="SECONDS",
         help="Delay between deleting each config (default: 0.5 seconds).",
     )
-    scm_delete_configs.set_defaults(func=cmd_scm_delete_configs)
+    ghes_delete_configs.set_defaults(func=cmd_scm_delete_configs)
 
-    scm_onboard_repos = scm_subparsers.add_parser(
+    ghes_onboard_repos = ghes_subparsers.add_parser(
         "onboard-repos",
         help="Onboard uninitialized repos to Semgrep managed scans",
     )
-    add_ghes_url_arg(scm_onboard_repos, required=False)
-    scm_onboard_repos.add_argument(
+    add_ghes_url_arg(ghes_onboard_repos, required=False)
+    ghes_onboard_repos.add_argument(
         "--dry-run",
         action="store_true",
         help="Show what would be changed without making any updates.",
     )
-    scm_onboard_repos.add_argument(
+    ghes_onboard_repos.add_argument(
         "--diff-scan",
         type=parse_bool,
         default=True,
         metavar="BOOL",
         help="Enable diff scanning (true/false, default: true).",
     )
-    scm_onboard_repos.add_argument(
+    ghes_onboard_repos.add_argument(
         "--full-scan",
         type=parse_bool,
         default=True,
         metavar="BOOL",
         help="Enable full scanning (true/false, default: true).",
     )
-    scm_onboard_repos.add_argument(
+    ghes_onboard_repos.add_argument(
         "--batch-size",
         type=int,
         default=250,
         metavar="N",
         help="Number of repos to update per batch (default: 250).",
     )
-    scm_onboard_repos.add_argument(
+    ghes_onboard_repos.add_argument(
         "--check-scm",
         type=parse_bool,
         default=True,
         metavar="BOOL",
         help="Only onboard repos with healthy SCM configs (true/false, default: true).",
     )
-    scm_onboard_repos.add_argument(
+    ghes_onboard_repos.add_argument(
         "--required-scopes",
         type=parse_scopes,
         metavar="SCOPES",
@@ -1279,40 +1480,40 @@ def main():
              "If not specified, only connection status is checked. "
              f"Valid scopes: {', '.join(ScmTokenScopes.ALL_SCOPES)}",
     )
-    scm_onboard_repos.add_argument(
+    ghes_onboard_repos.add_argument(
         "--delay",
         type=float,
         default=1.0,
         metavar="SECONDS",
         help="Delay between batches (default: 1.0 seconds).",
     )
-    scm_onboard_repos.set_defaults(func=cmd_scm_onboard_repos)
+    ghes_onboard_repos.set_defaults(func=cmd_scm_onboard_repos)
 
-    scm_trigger_scans = scm_subparsers.add_parser(
+    ghes_trigger_scans = ghes_subparsers.add_parser(
         "trigger-scans",
         help="Trigger scans for repos that haven't had a full scan",
     )
-    add_ghes_url_arg(scm_trigger_scans, required=False)
-    scm_trigger_scans.add_argument(
+    add_ghes_url_arg(ghes_trigger_scans, required=False)
+    ghes_trigger_scans.add_argument(
         "--dry-run",
         action="store_true",
         help="Show what would be triggered without making any changes.",
     )
-    scm_trigger_scans.add_argument(
+    ghes_trigger_scans.add_argument(
         "--batch-size",
         type=int,
         default=10,
         metavar="N",
         help="Number of scans to trigger per batch (default: 10).",
     )
-    scm_trigger_scans.add_argument(
+    ghes_trigger_scans.add_argument(
         "--check-scm",
         type=parse_bool,
         default=True,
         metavar="BOOL",
         help="Only scan repos with healthy SCM configs (true/false, default: true).",
     )
-    scm_trigger_scans.add_argument(
+    ghes_trigger_scans.add_argument(
         "--required-scopes",
         type=parse_scopes,
         metavar="SCOPES",
@@ -1320,37 +1521,153 @@ def main():
              "If not specified, only connection status is checked. "
              f"Valid scopes: {', '.join(ScmTokenScopes.ALL_SCOPES)}",
     )
-    scm_trigger_scans.add_argument(
+    ghes_trigger_scans.add_argument(
         "--delay",
         type=float,
         default=1.0,
         metavar="SECONDS",
         help="Delay between batches (default: 1.0 seconds).",
     )
-    scm_trigger_scans.add_argument(
+    ghes_trigger_scans.add_argument(
         "--check-delay",
         type=float,
         default=0.1,
         metavar="SECONDS",
         help="Delay between checking each repo for existing scans (default: 0.1 seconds).",
     )
-    scm_trigger_scans.add_argument(
+    ghes_trigger_scans.add_argument(
         "--skip-scan-check",
         action="store_true",
         help="Skip checking for existing scans and trigger for all repos.",
     )
-    scm_trigger_scans.set_defaults(func=cmd_scm_trigger_scans)
+    ghes_trigger_scans.set_defaults(func=cmd_scm_trigger_scans)
 
-    # GHES command group
-    ghes_parser = subparsers.add_parser("ghes", help="GitHub Enterprise Server operations")
-    ghes_subparsers = ghes_parser.add_subparsers(dest="ghes_command", required=True)
+    # GitLab Self-Managed command group
+    def add_glsm_url_arg(subparser: argparse.ArgumentParser) -> None:
+        subparser.add_argument(
+            "--glsm-url",
+            default=os.environ.get("GLSM_URL"),
+            required=not os.environ.get("GLSM_URL"),
+            metavar="URL",
+            help="GitLab Self-Managed URL (e.g., https://gitlab.example.com). Can also be set via GLSM_URL env var.",
+        )
 
-    ghes_list_orgs = ghes_subparsers.add_parser(
-        "list-orgs",
-        help="List all organizations on GHES",
+    glsm_parser = subparsers.add_parser("glsm", help="GitLab Self-Managed SCM config operations")
+    glsm_subparsers = glsm_parser.add_subparsers(dest="glsm_command", required=True)
+
+    glsm_create_configs = glsm_subparsers.add_parser(
+        "create-configs",
+        help="Create SCM configs for GitLab Self-Managed groups",
     )
-    add_ghes_url_arg(ghes_list_orgs, required=True)
-    ghes_list_orgs.set_defaults(func=cmd_ghes_list_orgs)
+    add_glsm_url_arg(glsm_create_configs)
+    glsm_create_configs.add_argument(
+        "--glsm-token",
+        default=os.environ.get("GLSM_TOKEN"),
+        metavar="TOKEN",
+        help="GitLab personal access token. Can also be set via GLSM_TOKEN env var.",
+    )
+    glsm_groups_group = glsm_create_configs.add_mutually_exclusive_group(required=True)
+    glsm_groups_group.add_argument(
+        "--groups",
+        nargs="+",
+        metavar="GROUP",
+        help="GitLab group names to create configs for.",
+    )
+    glsm_groups_group.add_argument(
+        "--groups-file",
+        type=argparse.FileType("r"),
+        metavar="FILE",
+        help="File containing group names (one per line).",
+    )
+    glsm_create_configs.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print what would be created without making any changes.",
+    )
+    glsm_create_configs.add_argument(
+        "--delay",
+        type=float,
+        default=1.0,
+        metavar="SECONDS",
+        help="Delay between creating each config (default: 1.0 seconds).",
+    )
+    glsm_create_configs.add_argument(
+        "--subscribe",
+        action="store_true",
+        help="Subscribe to webhooks (default: disabled).",
+    )
+    glsm_create_configs.add_argument(
+        "--auto-scan",
+        action="store_true",
+        help="Enable auto-scanning (default: disabled).",
+    )
+    glsm_create_configs.add_argument(
+        "--diff-enabled",
+        action="store_true",
+        help="Enable diff scanning (default: disabled).",
+    )
+    glsm_create_configs.set_defaults(func=cmd_glsm_create_configs)
+
+    glsm_update_configs = glsm_subparsers.add_parser(
+        "update-configs",
+        help="Update SCM configs for GitLab Self-Managed groups",
+    )
+    add_glsm_url_arg(glsm_update_configs)
+    glsm_update_configs.add_argument(
+        "--glsm-token",
+        metavar="TOKEN",
+        help="New access token to set on matching SCM configs.",
+    )
+    glsm_update_groups = glsm_update_configs.add_mutually_exclusive_group()
+    glsm_update_groups.add_argument(
+        "--groups",
+        nargs="+",
+        metavar="GROUP",
+        help="Specific group names to update (if not provided, updates all matching GLSM URL).",
+    )
+    glsm_update_groups.add_argument(
+        "--groups-file",
+        type=argparse.FileType("r"),
+        metavar="FILE",
+        help="File containing group names to update (one per line).",
+    )
+    glsm_update_configs.add_argument(
+        "--subscribe",
+        type=parse_bool,
+        metavar="BOOL",
+        help="Set subscribe to webhooks (true/false).",
+    )
+    glsm_update_configs.add_argument(
+        "--auto-scan",
+        type=parse_bool,
+        metavar="BOOL",
+        help="Set auto-scan enabled (true/false).",
+    )
+    glsm_update_configs.add_argument(
+        "--use-network-broker",
+        type=parse_bool,
+        metavar="BOOL",
+        help="Set use network broker (true/false).",
+    )
+    glsm_update_configs.add_argument(
+        "--diff-enabled",
+        type=parse_bool,
+        metavar="BOOL",
+        help="Set diff scanning enabled (true/false).",
+    )
+    glsm_update_configs.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print what would be updated without making any changes.",
+    )
+    glsm_update_configs.add_argument(
+        "--delay",
+        type=float,
+        default=1.0,
+        metavar="SECONDS",
+        help="Delay between updating each config (default: 1.0 seconds).",
+    )
+    glsm_update_configs.set_defaults(func=cmd_glsm_update_configs)
 
     args = parser.parse_args()
     args.func(args)
