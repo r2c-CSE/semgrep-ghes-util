@@ -560,19 +560,47 @@ def cmd_scm_delete_configs(args: argparse.Namespace) -> None:
         print("No matching SCM configs found.")
         return
 
-    print(f"Found {len(matching_configs)} config(s) to delete:\n")
-    for config in matching_configs:
+    # If --unhealthy-only, check health and filter out healthy configs
+    if args.unhealthy_only:
+        print(f"Checking health of {len(matching_configs)} config(s)...\n")
+        configs_to_delete = []
+        skipped = []
+        for i, config in enumerate(matching_configs):
+            try:
+                result = semgrep_client.check_scm_config(config_id=config.id)
+                if result.status.ok:
+                    skipped.append(config)
+                else:
+                    configs_to_delete.append(config)
+            except Exception:
+                configs_to_delete.append(config)
+            if args.delay > 0 and i < len(matching_configs) - 1:
+                time.sleep(args.delay)
+
+        if skipped:
+            print(f"Skipping {len(skipped)} healthy config(s):\n")
+            for config in skipped:
+                print(f"  - {config.namespace} (ID: {config.id})")
+            print()
+    else:
+        configs_to_delete = matching_configs
+
+    if not configs_to_delete:
+        print("No unhealthy configs to delete.")
+        return
+
+    print(f"Found {len(configs_to_delete)} config(s) to delete:\n")
+    for config in configs_to_delete:
         print(f"  - {config.namespace} (ID: {config.id})")
 
     if args.dry_run:
-        print(f"\n[DRY RUN] Would delete {len(matching_configs)} config(s).")
+        print(f"\n[DRY RUN] Would delete {len(configs_to_delete)} config(s).")
         return
 
-    print()
     deleted = 0
     failed = 0
 
-    for i, config in enumerate(matching_configs):
+    for i, config in enumerate(configs_to_delete):
         try:
             semgrep_client.delete_scm_config(config_id=config.id)
             print(f"  ✓ Deleted: {config.namespace}")
@@ -581,8 +609,7 @@ def cmd_scm_delete_configs(args: argparse.Namespace) -> None:
             print(f"  ✗ Failed: {config.namespace} - {e}")
             failed += 1
 
-        # Delay between requests (skip after last one)
-        if args.delay > 0 and i < len(matching_configs) - 1:
+        if args.delay > 0 and i < len(configs_to_delete) - 1:
             time.sleep(args.delay)
 
     print()
@@ -1145,6 +1172,90 @@ def cmd_glsm_update_configs(args: argparse.Namespace) -> None:
     print(f"Done. Updated: {updated}, Failed: {failed}")
 
 
+def cmd_glsm_delete_configs(args: argparse.Namespace) -> None:
+    """Delete Semgrep SCM configs for GitLab Self-Managed groups."""
+    semgrep_token = get_env_or_exit("SEMGREP_APP_TOKEN")
+
+    print(f"GitLab Self-Managed: {args.glsm_url}\n")
+
+    semgrep_client = SemgrepClient(semgrep_token)
+
+    # Get all configs and filter by type + URL
+    all_configs = semgrep_client.list_scm_configs()
+    normalized_glsm_url = args.glsm_url.rstrip("/").lower()
+    matching_configs = [
+        config for config in all_configs
+        if config.type == ScmType.GITLAB_SELFMANAGED.value
+        and config.base_url and config.base_url.rstrip("/").lower() == normalized_glsm_url
+    ]
+
+    # Filter by group names (required to prevent accidents)
+    group_names_lower = {g.lower() for g in args.groups}
+    matching_configs = [
+        config for config in matching_configs
+        if config.namespace.lower() in group_names_lower
+    ]
+
+    if not matching_configs:
+        print("No matching SCM configs found.")
+        return
+
+    # If --unhealthy-only, check health and filter out healthy configs
+    if args.unhealthy_only:
+        print(f"Checking health of {len(matching_configs)} config(s)...\n")
+        configs_to_delete = []
+        skipped = []
+        for i, config in enumerate(matching_configs):
+            try:
+                result = semgrep_client.check_scm_config(config_id=config.id)
+                if result.status.ok:
+                    skipped.append(config)
+                else:
+                    configs_to_delete.append(config)
+            except Exception:
+                configs_to_delete.append(config)
+            if args.delay > 0 and i < len(matching_configs) - 1:
+                time.sleep(args.delay)
+
+        if skipped:
+            print(f"Skipping {len(skipped)} healthy config(s):\n")
+            for config in skipped:
+                print(f"  - {config.namespace} (ID: {config.id})")
+            print()
+    else:
+        configs_to_delete = matching_configs
+
+    if not configs_to_delete:
+        print("No unhealthy configs to delete.")
+        return
+
+    print(f"Found {len(configs_to_delete)} config(s) to delete:\n")
+    for config in configs_to_delete:
+        print(f"  - {config.namespace} (ID: {config.id})")
+
+    if args.dry_run:
+        print(f"\n[DRY RUN] Would delete {len(configs_to_delete)} config(s).")
+        return
+
+    deleted = 0
+    failed = 0
+
+    for i, config in enumerate(configs_to_delete):
+        try:
+            semgrep_client.delete_scm_config(config_id=config.id)
+            print(f"  ✓ Deleted: {config.namespace}")
+            deleted += 1
+        except Exception as e:
+            print(f"  ✗ Failed: {config.namespace} - {e}")
+            failed += 1
+
+        if args.delay > 0 and i < len(configs_to_delete) - 1:
+            time.sleep(args.delay)
+
+    print()
+    print(f"Done. Deleted: {deleted}, Failed: {failed}")
+
+
 # GHES commands
 def cmd_ghes_list_orgs(args: argparse.Namespace) -> None:
     """List all organizations on GHES."""
@@ -1421,6 +1532,11 @@ def main():
         help="Org names to delete (required to prevent accidental deletion).",
     )
     ghes_delete_configs.add_argument(
+        "--unhealthy-only",
+        action="store_true",
+        help="Only delete configs that are unhealthy; skip healthy ones.",
+    )
+    ghes_delete_configs.add_argument(
         "--dry-run",
         action="store_true",
         help="Print what would be deleted without making any changes.",
@@ -1430,7 +1546,7 @@ def main():
         type=float,
         default=0.5,
         metavar="SECONDS",
-        help="Delay between deleting each config (default: 0.5 seconds).",
+        help="Delay between requests (default: 0.5 seconds).",
     )
     ghes_delete_configs.set_defaults(func=cmd_scm_delete_configs)
 
@@ -1668,6 +1784,37 @@ def main():
         help="Delay between updating each config (default: 1.0 seconds).",
     )
     glsm_update_configs.set_defaults(func=cmd_glsm_update_configs)
+
+    glsm_delete_configs = glsm_subparsers.add_parser(
+        "delete-configs",
+        help="Delete SCM configs for GitLab Self-Managed groups",
+    )
+    add_glsm_url_arg(glsm_delete_configs)
+    glsm_delete_configs.add_argument(
+        "--groups",
+        nargs="+",
+        metavar="GROUP",
+        required=True,
+        help="Group names to delete (required to prevent accidental deletion).",
+    )
+    glsm_delete_configs.add_argument(
+        "--unhealthy-only",
+        action="store_true",
+        help="Only delete configs that are unhealthy; skip healthy ones.",
+    )
+    glsm_delete_configs.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print what would be deleted without making any changes.",
+    )
+    glsm_delete_configs.add_argument(
+        "--delay",
+        type=float,
+        default=0.5,
+        metavar="SECONDS",
+        help="Delay between requests (default: 0.5 seconds).",
+    )
+    glsm_delete_configs.set_defaults(func=cmd_glsm_delete_configs)
 
     args = parser.parse_args()
     args.func(args)
