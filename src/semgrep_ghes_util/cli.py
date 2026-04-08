@@ -60,6 +60,9 @@ def cmd_scm_list_configs(args: argparse.Namespace) -> None:
 
     configs = client.list_scm_configs()
 
+    # Filter to GHES configs only
+    configs = [c for c in configs if c.type == ScmType.GITHUB_ENTERPRISE.value]
+
     # Filter by GHES URL if provided
     if args.ghes_url:
         normalized_ghes_url = args.ghes_url.rstrip("/").lower()
@@ -1009,6 +1012,59 @@ def cmd_scm_trigger_scans(args: argparse.Namespace) -> None:
 
 
 # GitLab Self-Managed commands
+def cmd_glsm_list_configs(args: argparse.Namespace) -> None:
+    """List Semgrep SCM configs for GitLab Self-Managed."""
+    semgrep_token = get_env_or_exit("SEMGREP_APP_TOKEN")
+    client = SemgrepClient(semgrep_token)
+
+    print(f"Deployment: {client.deployment.name} ({client.deployment.slug})\n")
+
+    configs = client.list_scm_configs()
+
+    # Filter to GLSM configs only
+    configs = [c for c in configs if c.type == ScmType.GITLAB_SELFMANAGED.value]
+
+    # Filter by GLSM URL if provided
+    if args.glsm_url:
+        normalized_glsm_url = args.glsm_url.rstrip("/").lower()
+        configs = [
+            c for c in configs
+            if c.base_url and c.base_url.rstrip("/").lower() == normalized_glsm_url
+        ]
+
+    required_scopes = getattr(args, "required_scopes", None)
+
+    if args.unhealthy_only:
+        configs = [c for c in configs if not c.meets_requirements(required_scopes)]
+
+    if not configs:
+        if args.unhealthy_only:
+            print("No unhealthy GLSM SCM configs found.")
+        else:
+            print("No GLSM SCM configs found.")
+        return
+
+    label = "unhealthy " if args.unhealthy_only else ""
+    print(f"Found {len(configs)} {label}GLSM SCM config(s):\n")
+    for config in configs:
+        meets_reqs = config.meets_requirements(required_scopes)
+        status = "✓" if meets_reqs else "✗"
+        print(f"  [{status}] {config.namespace}")
+        if config.base_url:
+            print(f"      URL: {config.base_url}")
+        print(f"      ID: {config.id}")
+        if not meets_reqs:
+            if config.status and config.status.error:
+                print(f"      Error: {config.status.error}")
+            elif not config.is_healthy:
+                print(f"      Error: Connection unhealthy")
+            if required_scopes and config.token_scopes:
+                missing = config.token_scopes.missing_scopes(required_scopes)
+                if missing:
+                    print(f"      Missing scopes: {', '.join(missing)}")
+        print()
+
+
 def cmd_glsm_create_configs(args: argparse.Namespace) -> None:
     """Create Semgrep SCM configs for GitLab Self-Managed groups."""
     semgrep_token = get_env_or_exit("SEMGREP_APP_TOKEN")
@@ -1659,17 +1715,37 @@ def main():
     ghes_trigger_scans.set_defaults(func=cmd_scm_trigger_scans)
 
     # GitLab Self-Managed command group
-    def add_glsm_url_arg(subparser: argparse.ArgumentParser) -> None:
+    def add_glsm_url_arg(subparser: argparse.ArgumentParser, required: bool = True) -> None:
         subparser.add_argument(
             "--glsm-url",
             default=os.environ.get("GLSM_URL"),
-            required=not os.environ.get("GLSM_URL"),
+            required=required and not os.environ.get("GLSM_URL"),
             metavar="URL",
             help="GitLab Self-Managed URL (e.g., https://gitlab.example.com). Can also be set via GLSM_URL env var.",
         )
 
     glsm_parser = subparsers.add_parser("glsm", help="GitLab Self-Managed SCM config operations")
     glsm_subparsers = glsm_parser.add_subparsers(dest="glsm_command", required=True)
+
+    glsm_list_configs = glsm_subparsers.add_parser(
+        "list-configs",
+        help="List Semgrep SCM configs for GitLab Self-Managed",
+    )
+    add_glsm_url_arg(glsm_list_configs, required=False)
+    glsm_list_configs.add_argument(
+        "--unhealthy-only",
+        action="store_true",
+        help="Only show unhealthy SCM configs.",
+    )
+    glsm_list_configs.add_argument(
+        "--required-scopes",
+        type=parse_scopes,
+        metavar="SCOPES",
+        help="Comma-separated list of required token scopes for health check. "
+             "If not specified, only connection status is checked. "
+             f"Valid scopes: {', '.join(ScmTokenScopes.ALL_SCOPES)}",
+    )
+    glsm_list_configs.set_defaults(func=cmd_glsm_list_configs)
 
     glsm_create_configs = glsm_subparsers.add_parser(
         "create-configs",
