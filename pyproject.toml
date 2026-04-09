@@ -1,6 +1,6 @@
 [project]
-name = "semgrep-ghes-util"
-version = "0.1.0"
+name = "semgrep-scm-util"
+version = "0.2.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12.8"
@@ -10,7 +10,10 @@ dependencies = [
 ]
 
 [project.scripts]
-semgrep-ghes-util = "semgrep_ghes_util.cli:main"
+semgrep-scm-util = "semgrep_ghes_util.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/semgrep_ghes_util"]
 
 [build-system]
 requires = ["hatchling"]

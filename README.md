@@ -1,4 +1,4 @@
-# semgrep-ghes-util
+# semgrep-scm-util
 
 CLI tool for syncing GitHub Enterprise Server (GHES) and GitLab Self-Managed (GLSM) organizations to Semgrep SCM configs. Can create, update, and delete SCM configurations.
 
@@ -32,19 +32,19 @@ Set the following environment variables (or use a `.env` file):
 
 ```bash
 # List all GHES organizations
-uv run semgrep-ghes-util ghes list-orgs --ghes-url https://github.example.com
+uv run semgrep-scm-util ghes list-orgs --ghes-url https://github.example.com
 
 # List all Semgrep SCM configs
-uv run semgrep-ghes-util ghes list-configs
+uv run semgrep-scm-util ghes list-configs
 
 # List only unhealthy SCM configs
-uv run semgrep-ghes-util ghes list-configs --unhealthy-only
+uv run semgrep-scm-util ghes list-configs --unhealthy-only
 
 # List SCM configs for a specific GHES instance
-uv run semgrep-ghes-util ghes list-configs --ghes-url https://github.example.com
+uv run semgrep-scm-util ghes list-configs --ghes-url https://github.example.com
 
 # List GHES orgs not yet onboarded to Semgrep
-uv run semgrep-ghes-util ghes list-missing-configs --ghes-url https://github.example.com
+uv run semgrep-scm-util ghes list-missing-configs --ghes-url https://github.example.com
 ```
 
 **list-configs flags:**
@@ -61,14 +61,14 @@ By default, health checks only verify **connection status** (can Semgrep reach t
 
 ```bash
 # Basic health check (connection only)
-uv run semgrep-ghes-util ghes list-configs --unhealthy-only
+uv run semgrep-scm-util ghes list-configs --unhealthy-only
 
 # Require read access for scanning
-uv run semgrep-ghes-util ghes list-configs --unhealthy-only \
+uv run semgrep-scm-util ghes list-configs --unhealthy-only \
   --required-scopes read_metadata,read_contents
 
 # Require full managed scanning capabilities
-uv run semgrep-ghes-util ghes list-configs --unhealthy-only \
+uv run semgrep-scm-util ghes list-configs --unhealthy-only \
   --required-scopes read_metadata,read_contents,read_pull_request,write_pull_request_comment,manage_webhooks
 ```
 
@@ -98,10 +98,10 @@ Create configs that only establish the connection, without enabling webhooks or 
 
 ```bash
 # Create for a single org
-uv run semgrep-ghes-util ghes create-config --ghes-url https://github.example.com --ghes-org my-org
+uv run semgrep-scm-util ghes create-config --ghes-url https://github.example.com --ghes-org my-org
 
 # Create for all missing orgs
-uv run semgrep-ghes-util ghes create-missing-configs --ghes-url https://github.example.com
+uv run semgrep-scm-util ghes create-missing-configs --ghes-url https://github.example.com
 ```
 
 #### Managed scanning configs
@@ -110,11 +110,11 @@ Create configs with webhooks and scanning enabled for full Semgrep managed scann
 
 ```bash
 # Create for a single org with managed scanning
-uv run semgrep-ghes-util ghes create-config --ghes-url https://github.example.com --ghes-org my-org \
+uv run semgrep-scm-util ghes create-config --ghes-url https://github.example.com --ghes-org my-org \
   --subscribe --auto-scan --diff-enabled
 
 # Create for all missing orgs with managed scanning
-uv run semgrep-ghes-util ghes create-missing-configs --ghes-url https://github.example.com \
+uv run semgrep-scm-util ghes create-missing-configs --ghes-url https://github.example.com \
   --subscribe --auto-scan --diff-enabled
 ```
 
@@ -131,7 +131,7 @@ When onboarding many orgs, create one config first to verify the token works, th
 **Step 1: Create and verify a single config**
 
 ```bash
-uv run semgrep-ghes-util ghes create-config --ghes-url https://github.example.com --ghes-org my-first-org \
+uv run semgrep-scm-util ghes create-config --ghes-url https://github.example.com --ghes-org my-first-org \
   --subscribe --auto-scan --diff-enabled
 ```
 
@@ -151,13 +151,13 @@ Use --scm-id 138447 with create-missing-configs to reuse this token.
 **Step 2: Preview remaining orgs**
 
 ```bash
-uv run semgrep-ghes-util ghes create-missing-configs --ghes-url https://github.example.com --dry-run
+uv run semgrep-scm-util ghes create-missing-configs --ghes-url https://github.example.com --dry-run
 ```
 
 **Step 3: Create configs for remaining orgs (reusing the token)**
 
 ```bash
-uv run semgrep-ghes-util ghes create-missing-configs --ghes-url https://github.example.com \
+uv run semgrep-scm-util ghes create-missing-configs --ghes-url https://github.example.com \
   --scm-id 138447 --subscribe --auto-scan --diff-enabled
 ```
 
@@ -165,11 +165,11 @@ uv run semgrep-ghes-util ghes create-missing-configs --ghes-url https://github.e
 
 ```bash
 # By name
-uv run semgrep-ghes-util ghes create-missing-configs --ghes-url https://github.example.com \
+uv run semgrep-scm-util ghes create-missing-configs --ghes-url https://github.example.com \
   --orgs org1 org2 org3
 
 # From file (one org per line)
-uv run semgrep-ghes-util ghes create-missing-configs --ghes-url https://github.example.com \
+uv run semgrep-scm-util ghes create-missing-configs --ghes-url https://github.example.com \
   --orgs-file orgs.txt
 ```
 
@@ -195,20 +195,20 @@ Bulk update SCM configs matching a GHES URL. Only the properties you specify wil
 
 ```bash
 # Preview what would be updated (dry-run)
-uv run semgrep-ghes-util ghes update-configs --ghes-url https://github.example.com --subscribe true --dry-run
+uv run semgrep-scm-util ghes update-configs --ghes-url https://github.example.com --subscribe true --dry-run
 
 # Update all configs for the GHES instance
-uv run semgrep-ghes-util ghes update-configs --ghes-url https://github.example.com --subscribe true
+uv run semgrep-scm-util ghes update-configs --ghes-url https://github.example.com --subscribe true
 
 # Update specific orgs only
-uv run semgrep-ghes-util ghes update-configs --ghes-url https://github.example.com --orgs org1 org2 --auto-scan true
+uv run semgrep-scm-util ghes update-configs --ghes-url https://github.example.com --orgs org1 org2 --auto-scan true
 
 # Update multiple properties at once
-uv run semgrep-ghes-util ghes update-configs --ghes-url https://github.example.com \
+uv run semgrep-scm-util ghes update-configs --ghes-url https://github.example.com \
   --subscribe true --auto-scan false --diff-enabled true
 
 # Rotate the access token on all configs for this GHES instance
-uv run semgrep-ghes-util ghes update-configs --ghes-url https://github.example.com \
+uv run semgrep-scm-util ghes update-configs --ghes-url https://github.example.com \
   --ghes-token <new-token>
 ```
 
@@ -231,13 +231,13 @@ Check the health status of SCM configs, including connection status and token sc
 
 ```bash
 # Check all configs for a GHES instance (connection only)
-uv run semgrep-ghes-util ghes check-configs --ghes-url https://github.example.com
+uv run semgrep-scm-util ghes check-configs --ghes-url https://github.example.com
 
 # Check specific orgs only
-uv run semgrep-ghes-util ghes check-configs --ghes-url https://github.example.com --orgs org1 org2
+uv run semgrep-scm-util ghes check-configs --ghes-url https://github.example.com --orgs org1 org2
 
 # Check with specific scope requirements
-uv run semgrep-ghes-util ghes check-configs --ghes-url https://github.example.com \
+uv run semgrep-scm-util ghes check-configs --ghes-url https://github.example.com \
   --required-scopes read_metadata,read_contents
 ```
 
@@ -255,13 +255,13 @@ Delete SCM configs for specific orgs. The `--orgs` flag is required to prevent a
 
 ```bash
 # Preview what would be deleted (dry-run)
-uv run semgrep-ghes-util ghes delete-configs --ghes-url https://github.example.com --orgs org1 org2 --dry-run
+uv run semgrep-scm-util ghes delete-configs --ghes-url https://github.example.com --orgs org1 org2 --dry-run
 
 # Delete specific orgs
-uv run semgrep-ghes-util ghes delete-configs --ghes-url https://github.example.com --orgs org1 org2
+uv run semgrep-scm-util ghes delete-configs --ghes-url https://github.example.com --orgs org1 org2
 
 # Only delete configs that are unhealthy (skip healthy ones)
-uv run semgrep-ghes-util ghes delete-configs --ghes-url https://github.example.com \
+uv run semgrep-scm-util ghes delete-configs --ghes-url https://github.example.com \
   --orgs org1 org2 --unhealthy-only
 ```
 
@@ -285,19 +285,19 @@ Bulk onboard uninitialized repos to Semgrep managed scans. This command:
 
 ```bash
 # Preview what would be onboarded (dry-run)
-uv run semgrep-ghes-util ghes onboard-repos --dry-run
+uv run semgrep-scm-util ghes onboard-repos --dry-run
 
 # Onboard all uninitialized repos
-uv run semgrep-ghes-util ghes onboard-repos
+uv run semgrep-scm-util ghes onboard-repos
 
 # Onboard repos for a specific GHES instance only
-uv run semgrep-ghes-util ghes onboard-repos --ghes-url https://github.example.com
+uv run semgrep-scm-util ghes onboard-repos --ghes-url https://github.example.com
 
 # Onboard without checking SCM health
-uv run semgrep-ghes-util ghes onboard-repos --check-scm false
+uv run semgrep-scm-util ghes onboard-repos --check-scm false
 
 # Customize batch size
-uv run semgrep-ghes-util ghes onboard-repos --batch-size 100
+uv run semgrep-scm-util ghes onboard-repos --batch-size 100
 ```
 
 **Available flags:**
@@ -325,19 +325,19 @@ Trigger scans for repos that haven't had a full scan yet. This command:
 
 ```bash
 # Preview what would be triggered (dry-run)
-uv run semgrep-ghes-util ghes trigger-scans --dry-run
+uv run semgrep-scm-util ghes trigger-scans --dry-run
 
 # Trigger scans, checking for existing scans first
-uv run semgrep-ghes-util ghes trigger-scans
+uv run semgrep-scm-util ghes trigger-scans
 
 # Skip the existing scan check (faster for large repos)
-uv run semgrep-ghes-util ghes trigger-scans --skip-scan-check
+uv run semgrep-scm-util ghes trigger-scans --skip-scan-check
 
 # Trigger for a specific GHES instance
-uv run semgrep-ghes-util ghes trigger-scans --ghes-url https://github.example.com
+uv run semgrep-scm-util ghes trigger-scans --ghes-url https://github.example.com
 
 # Customize batch size and delays (for reducing system load)
-uv run semgrep-ghes-util ghes trigger-scans --batch-size 10 --delay 5
+uv run semgrep-scm-util ghes trigger-scans --batch-size 10 --delay 5
 ```
 
 **Available flags:**
@@ -363,24 +363,24 @@ Create Semgrep SCM configs for GitLab Self-Managed groups. Groups can be specifi
 
 ```bash
 # Create configs for specific groups
-uv run semgrep-ghes-util glsm create-configs \
+uv run semgrep-scm-util glsm create-configs \
   --glsm-url https://gitlab.example.com \
   --glsm-token <token> \
   --groups my-group another-group
 
 # Create configs from a file (one group per line, # comments supported)
-uv run semgrep-ghes-util glsm create-configs \
+uv run semgrep-scm-util glsm create-configs \
   --glsm-url https://gitlab.example.com \
   --groups-file groups.txt
 
 # Create with managed scanning enabled
-uv run semgrep-ghes-util glsm create-configs \
+uv run semgrep-scm-util glsm create-configs \
   --glsm-url https://gitlab.example.com \
   --groups my-group \
   --subscribe --auto-scan --diff-enabled
 
 # Preview without making changes
-uv run semgrep-ghes-util glsm create-configs \
+uv run semgrep-scm-util glsm create-configs \
   --glsm-url https://gitlab.example.com \
   --groups my-group \
   --dry-run
@@ -406,23 +406,23 @@ Bulk update SCM configs for a GitLab Self-Managed instance. Only the properties 
 
 ```bash
 # Update all configs for the GLSM instance
-uv run semgrep-ghes-util glsm update-configs \
+uv run semgrep-scm-util glsm update-configs \
   --glsm-url https://gitlab.example.com \
   --subscribe true
 
 # Update specific groups only
-uv run semgrep-ghes-util glsm update-configs \
+uv run semgrep-scm-util glsm update-configs \
   --glsm-url https://gitlab.example.com \
   --groups my-group another-group \
   --auto-scan true
 
 # Rotate the access token on all configs for this GLSM instance
-uv run semgrep-ghes-util glsm update-configs \
+uv run semgrep-scm-util glsm update-configs \
   --glsm-url https://gitlab.example.com \
   --glsm-token <new-token>
 
 # Preview without making changes
-uv run semgrep-ghes-util glsm update-configs \
+uv run semgrep-scm-util glsm update-configs \
   --glsm-url https://gitlab.example.com \
   --subscribe true --dry-run
 ```
@@ -448,18 +448,18 @@ Delete SCM configs for specific groups. The `--groups` flag is required to preve
 
 ```bash
 # Preview what would be deleted (dry-run)
-uv run semgrep-ghes-util glsm delete-configs \
+uv run semgrep-scm-util glsm delete-configs \
   --glsm-url https://gitlab.example.com \
   --groups my-group another-group \
   --dry-run
 
 # Delete specific groups
-uv run semgrep-ghes-util glsm delete-configs \
+uv run semgrep-scm-util glsm delete-configs \
   --glsm-url https://gitlab.example.com \
   --groups my-group another-group
 
 # Only delete configs that are unhealthy (skip healthy ones)
-uv run semgrep-ghes-util glsm delete-configs \
+uv run semgrep-scm-util glsm delete-configs \
   --glsm-url https://gitlab.example.com \
   --groups my-group another-group \
   --unhealthy-only
@@ -479,15 +479,15 @@ uv run semgrep-ghes-util glsm delete-configs \
 
 ```bash
 # Build
-docker build -t semgrep-ghes-util .
+docker build -t semgrep-scm-util .
 
 # Run with .env file
-docker run --rm --env-file .env semgrep-ghes-util ghes list-configs
+docker run --rm --env-file .env semgrep-scm-util ghes list-configs
 
 # Run with individual env vars
 docker run --rm \
   -e SEMGREP_APP_TOKEN \
   -e GHES_TOKEN \
   -e GHES_URL \
-  semgrep-ghes-util ghes list-configs
+  semgrep-scm-util ghes list-configs
 ```

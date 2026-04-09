@@ -1341,8 +1341,8 @@ def main():
         sys.argv[1] = "ghes"
 
     parser = argparse.ArgumentParser(
-        prog="semgrep-ghes-util",
-        description="Tools for managing Semgrep SCM configs with GitHub Enterprise Server",
+        prog="semgrep-scm-util",
+        description="Tools for managing Semgrep SCM configs across GitHub Enterprise Server and GitLab Self-Managed instances.",
     )
 
     subparsers = parser.add_subparsers(dest="command", required=True)

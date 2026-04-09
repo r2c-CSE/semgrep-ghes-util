@@ -9,4 +9,4 @@ COPY src ./src
 
 RUN uv sync --frozen --no-dev
 
-ENTRYPOINT ["uv", "run", "semgrep-ghes-util"]
+ENTRYPOINT ["uv", "run", "semgrep-scm-util"]

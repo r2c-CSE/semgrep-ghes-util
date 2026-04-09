@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 ## Project Overview
-semgrep-ghes-util is a CLI tool for syncing GitHub Enterprise Server (GHES) organizations to Semgrep SCM configs. It discovers GitHub orgs not yet onboarded to Semgrep and can create the necessary SCM configurations.
+semgrep-scm-util is a CLI tool for managing Semgrep SCM configs across GitHub Enterprise Server (GHES) and GitLab Self-Managed (GLSM) instances. For GHES, it discovers orgs not yet onboarded to Semgrep and can create the necessary SCM configurations.
 
 ## Tech Stack
 - Python 3.12+
@@ -25,34 +25,38 @@ src/semgrep_ghes_util/
 uv sync
 
 # Run CLI
-uv run semgrep-ghes-util --help
-
-# SCM commands (Semgrep SCM config operations)
-uv run semgrep-ghes-util scm list-configs           # List all Semgrep SCM configs
-uv run semgrep-ghes-util scm list-missing-configs   # List GHES orgs not in Semgrep
-uv run semgrep-ghes-util scm create-missing-configs # Create configs for missing orgs
+uv run semgrep-scm-util --help
 
 # GHES commands (GitHub Enterprise Server operations)
-uv run semgrep-ghes-util ghes list-orgs             # List all GHES organizations
+uv run semgrep-scm-util ghes list-orgs             # List all GHES organizations
+uv run semgrep-scm-util ghes list-configs          # List Semgrep SCM configs for GHES
+uv run semgrep-scm-util ghes list-missing-configs  # List GHES orgs not in Semgrep
+uv run semgrep-scm-util ghes create-missing-configs # Create configs for missing orgs
+
+# GLSM commands (GitLab Self-Managed operations)
+uv run semgrep-scm-util glsm list-configs          # List Semgrep SCM configs for GLSM
+uv run semgrep-scm-util glsm create-configs        # Create configs for specified groups
 ```
 
 ## Docker
 ```bash
 # Build
-docker build -t semgrep-ghes-util .
+docker build -t semgrep-scm-util .
 
 # Run with .env file
-docker run --rm --env-file .env semgrep-ghes-util scm list-configs
+docker run --rm --env-file .env semgrep-scm-util ghes list-configs
 
 # Run with individual env vars
 docker run --rm \
   -e SEMGREP_APP_TOKEN \
   -e GHES_TOKEN \
   -e GHES_URL \
-  semgrep-ghes-util scm list-configs
+  semgrep-scm-util ghes list-configs
 ```
 
 ## Environment Variables
 - `SEMGREP_APP_TOKEN` (required) - Semgrep API token
-- `GHES_TOKEN` (required) - GitHub Enterprise Server token
+- `GHES_TOKEN` (required for GHES commands) - GitHub Enterprise Server token
 - `GHES_URL` (optional) - GHES URL, can also be passed via `--ghes-url`
+- `GLSM_TOKEN` (required for GLSM create) - GitLab Self-Managed token
+- `GLSM_URL` (optional) - GLSM URL, can also be passed via `--glsm-url`
