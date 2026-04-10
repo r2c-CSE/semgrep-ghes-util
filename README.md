@@ -34,10 +34,10 @@ Set the following environment variables (or use a `.env` file):
 # List all GHES organizations
 uv run semgrep-scm-util ghes list-orgs --ghes-url https://github.example.com
 
-# List all Semgrep SCM configs
+# List all Semgrep GHES SCM configs
 uv run semgrep-scm-util ghes list-configs
 
-# List only unhealthy SCM configs
+# List only unhealthy GHES SCM configs
 uv run semgrep-scm-util ghes list-configs --unhealthy-only
 
 # List SCM configs for a specific GHES instance
@@ -57,7 +57,7 @@ uv run semgrep-scm-util ghes list-missing-configs --ghes-url https://github.exam
 
 #### Health checks and token scopes
 
-By default, health checks only verify **connection status** (can Semgrep reach the SCM?). Use `--required-scopes` to also require specific token permissions:
+By default, health checks only verify **connection status** (whether Semgrep can reach the SCM). Use `--required-scopes` to also require specific token permissions:
 
 ```bash
 # Basic health check (connection only)

@@ -576,12 +576,16 @@ def cmd_scm_delete_configs(args: argparse.Namespace) -> None:
                 else:
                     configs_to_delete.append(config)
             except Exception:
-                configs_to_delete.append(config)
-            if args.delay > 0 and i < len(matching_configs) - 1:
+                # be safe: if we couldn't check health, don't delete
+                # TODO: does raising an exception definitely mean that we couldn't check health? 
+                skipped.append(config)
+
+            # Delay between requests (skip after last one)
+            if args.delay > 0 and i < len(configs_to_delete) - 1:
                 time.sleep(args.delay)
 
         if skipped:
-            print(f"Skipping {len(skipped)} healthy config(s):\n")
+            print(f"Skipping {len(skipped)} healthy or undetermined config(s):\n")
             for config in skipped:
                 print(f"  - {config.namespace} (ID: {config.id})")
             print()
@@ -1221,6 +1225,7 @@ def cmd_glsm_update_configs(args: argparse.Namespace) -> None:
             print(f"  ✗ Failed: {config.namespace} - {e}")
             failed += 1
 
+        # Delay between requests (skip after last one)
         if args.delay > 0 and i < len(matching_configs) - 1:
             time.sleep(args.delay)
 
@@ -1269,12 +1274,17 @@ def cmd_glsm_delete_configs(args: argparse.Namespace) -> None:
                 else:
                     configs_to_delete.append(config)
             except Exception:
-                configs_to_delete.append(config)
+                # be safe: if we couldn't check health, don't delete
+                # TODO: does raising an exception definitely mean that we couldn't check health? 
+
+                skipped.append(config)
+
+            # Delay between requests (skip after last one)
             if args.delay > 0 and i < len(matching_configs) - 1:
                 time.sleep(args.delay)
 
         if skipped:
-            print(f"Skipping {len(skipped)} healthy config(s):\n")
+            print(f"Skipping {len(skipped)} healthy or undetermined config(s):\n")
             for config in skipped:
                 print(f"  - {config.namespace} (ID: {config.id})")
             print()
@@ -1425,7 +1435,7 @@ def main():
     ghes_create_config.add_argument(
         "--auto-scan",
         action="store_true",
-        help="Enable auto-scanning (default: disabled).",
+        help="Enable scanning of new repos in the org automatically (default: disabled).",
     )
     ghes_create_config.add_argument(
         "--diff-enabled",
@@ -1484,7 +1494,7 @@ def main():
     ghes_create_missing.add_argument(
         "--auto-scan",
         action="store_true",
-        help="Enable auto-scanning (default: disabled).",
+        help="Enable scanning of new repos in the org automatically (default: disabled).",
     )
     ghes_create_missing.add_argument(
         "--diff-enabled",
@@ -1514,7 +1524,7 @@ def main():
         "--auto-scan",
         type=parse_bool,
         metavar="BOOL",
-        help="Set auto-scan enabled (true/false).",
+        help="Enable scanning of new repos in the org automatically (true/false).",
     )
     ghes_update_configs.add_argument(
         "--use-network-broker",
@@ -1530,8 +1540,11 @@ def main():
     )
     ghes_update_configs.add_argument(
         "--ghes-token",
+        nargs="?",
+        const=os.environ.get("GHES_TOKEN"),
+        default=None,
         metavar="TOKEN",
-        help="New access token to set on matching SCM configs.",
+        help="Update the access token. If no value is given, uses GHES_TOKEN env var.",
     )
     ghes_update_configs.add_argument(
         "--dry-run",
@@ -1602,7 +1615,7 @@ def main():
         type=float,
         default=0.5,
         metavar="SECONDS",
-        help="Delay between requests (default: 0.5 seconds).",
+        help="Delay between each request to check or delete a config (default: 0.5 seconds).",
     )
     ghes_delete_configs.set_defaults(func=cmd_scm_delete_configs)
 
@@ -1791,7 +1804,7 @@ def main():
     glsm_create_configs.add_argument(
         "--auto-scan",
         action="store_true",
-        help="Enable auto-scanning (default: disabled).",
+        help="Enable scanning of new repos in the org automatically (default: disabled).",
     )
     glsm_create_configs.add_argument(
         "--diff-enabled",
@@ -1807,8 +1820,11 @@ def main():
     add_glsm_url_arg(glsm_update_configs)
     glsm_update_configs.add_argument(
         "--glsm-token",
+        nargs="?",
+        const=os.environ.get("GLSM_TOKEN"),
+        default=None,
         metavar="TOKEN",
-        help="New access token to set on matching SCM configs.",
+        help="Update the access token. If no value is given, uses GLSM_TOKEN env var.",
     )
     glsm_update_groups = glsm_update_configs.add_mutually_exclusive_group()
     glsm_update_groups.add_argument(
@@ -1833,7 +1849,7 @@ def main():
         "--auto-scan",
         type=parse_bool,
         metavar="BOOL",
-        help="Set auto-scan enabled (true/false).",
+        help="Enable scanning of new repos in the org automatically (true/false).",
     )
     glsm_update_configs.add_argument(
         "--use-network-broker",
@@ -1888,7 +1904,7 @@ def main():
         type=float,
         default=0.5,
         metavar="SECONDS",
-        help="Delay between requests (default: 0.5 seconds).",
+        help="Delay between each request to check or delete a config (default: 0.5 seconds).",
     )
     glsm_delete_configs.set_defaults(func=cmd_glsm_delete_configs)
 
