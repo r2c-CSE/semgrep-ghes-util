@@ -554,14 +554,9 @@ def cmd_scm_delete_configs(args: argparse.Namespace) -> None:
     normalized_ghes_url = args.ghes_url.rstrip("/").lower()
     matching_configs = [
         config for config in all_configs
-        if config.base_url and config.base_url.rstrip("/").lower() == normalized_ghes_url
+        if config.type == ScmType.GITHUB_ENTERPRISE.value
+        and config.base_url and config.base_url.rstrip("/").lower() == normalized_ghes_url
     ]
-
-    # Filter by org names (required for delete to prevent accidents)
-    if not args.orgs:
-        print("Error: --orgs is required for delete-configs to prevent accidental deletion.")
-        print("Specify the org names to delete, e.g.: --orgs org1 org2 org3")
-        sys.exit(1)
 
     org_names_lower = {org.lower() for org in args.orgs}
     matching_configs = [
@@ -591,7 +586,7 @@ def cmd_scm_delete_configs(args: argparse.Namespace) -> None:
                 skipped.append(config)
 
             # Delay between requests (skip after last one)
-            if args.delay > 0 and i < len(configs_to_delete) - 1:
+            if args.delay > 0 and i < len(matching_configs) - 1:
                 time.sleep(args.delay)
 
         if skipped:
@@ -626,6 +621,7 @@ def cmd_scm_delete_configs(args: argparse.Namespace) -> None:
             print(f"  ✗ Failed: {config.namespace} - {e}")
             failed += 1
 
+        # Delay between requests (skip after last one)
         if args.delay > 0 and i < len(configs_to_delete) - 1:
             time.sleep(args.delay)
 
@@ -818,7 +814,7 @@ def cmd_scm_onboard_repos(args: argparse.Namespace) -> None:
 
     if args.dry_run:
         print(f"\n[DRY RUN] Would enable managed scans for {len(repo_ids)} repos:")
-        print(f"  - diffScan: disabled (hardcoded)")
+        print(f"  - diffScan: {'enabled' if args.diff_scan else 'disabled'}")
         print(f"  - fullScan: {'enabled' if args.full_scan else 'disabled'}")
         print(f"  - batches: {num_batches} (batch size: {args.batch_size})")
         return
@@ -962,6 +958,7 @@ def cmd_scm_trigger_scans(args: argparse.Namespace) -> None:
                 failed_count += len(batch)
                 print(f"  Batch {batch_num}/{num_batches}: ERROR - {e}")
 
+            # Delay between batches (skip after last one)
             if args.delay > 0 and i + args.batch_size < len(repo_ids):
                 time.sleep(args.delay)
 
@@ -1145,6 +1142,7 @@ def cmd_glsm_create_configs(args: argparse.Namespace) -> None:
             print(f"  ✗ Failed: {group_name} - {e}")
             failed += 1
 
+        # Delay between requests (skip after last one)
         if args.delay > 0 and i < len(group_names) - 1:
             time.sleep(args.delay)
 
@@ -1325,6 +1323,7 @@ def cmd_glsm_delete_configs(args: argparse.Namespace) -> None:
             print(f"  ✗ Failed: {config.namespace} - {e}")
             failed += 1
 
+        # Delay between requests (skip after last one)
         if args.delay > 0 and i < len(configs_to_delete) - 1:
             time.sleep(args.delay)
 
