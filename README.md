@@ -216,7 +216,8 @@ uv run semgrep-scm-util ghes update-configs --ghes-url https://github.example.co
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--orgs` | all | Specific org names to update |
+| `--orgs` | all | Specific org names to update (mutually exclusive with --orgs-file) |
+| `--orgs-file` | - | File containing org names to update, one per line (mutually exclusive with --orgs) |
 | `--subscribe` | - | Subscribe to webhooks (true/false) |
 | `--auto-scan` | - | Enable auto-scanning (true/false) |
 | `--use-network-broker` | - | Use network broker (true/false) |

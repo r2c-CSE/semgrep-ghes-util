@@ -383,8 +383,18 @@ def cmd_scm_update_configs(args: argparse.Namespace) -> None:
     ]
 
     # Optionally filter by org names
+    org_names: list[str] | None = None
     if args.orgs:
-        org_names_lower = {org.lower() for org in args.orgs}
+        org_names = args.orgs
+    elif args.orgs_file:
+        org_names = [
+            line.strip() for line in args.orgs_file
+            if line.strip() and not line.strip().startswith("#")
+        ]
+        args.orgs_file.close()
+
+    if org_names:
+        org_names_lower = {org.lower() for org in org_names}
         matching_configs = [
             config for config in matching_configs
             if config.namespace.lower() in org_names_lower
@@ -1508,11 +1518,18 @@ def main():
         help="Update SCM configs matching the GHES URL",
     )
     add_ghes_url_arg(ghes_update_configs, required=True)
-    ghes_update_configs.add_argument(
+    ghes_update_orgs_group = ghes_update_configs.add_mutually_exclusive_group()
+    ghes_update_orgs_group.add_argument(
         "--orgs",
         nargs="+",
         metavar="ORG",
         help="Specific org names to update (if not provided, updates all matching GHES URL).",
+    )
+    ghes_update_orgs_group.add_argument(
+        "--orgs-file",
+        type=argparse.FileType("r"),
+        metavar="FILE",
+        help="File containing org names to update (one per line).",
     )
     ghes_update_configs.add_argument(
         "--subscribe",
