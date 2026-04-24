@@ -488,6 +488,7 @@ class SemgrepClient:
     def patch_scm_config(
         self,
         config_id: str,
+        access_token: str | None = None,
         subscribe: bool | None = None,
         auto_scan: bool | None = None,
         use_network_broker: bool | None = None,
@@ -499,6 +500,7 @@ class SemgrepClient:
 
         Args:
             config_id: The config ID to update
+            access_token: New access token for the SCM
             subscribe: Whether to auto-subscribe to webhooks
             auto_scan: Whether to enable auto-scanning
             use_network_broker: Whether to use network broker
@@ -508,6 +510,8 @@ class SemgrepClient:
         """
         body: dict = {}
 
+        if access_token is not None:
+            body["accessToken"] = access_token
         if subscribe is not None:
             body["subscribe"] = subscribe
         if auto_scan is not None:
