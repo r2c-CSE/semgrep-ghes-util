@@ -145,7 +145,7 @@ Checking SCM health...
   ✓ Connected
   Token scopes: read_metadata, read_pull_request, write_pull_request_comment, read_contents, read_members, manage_webhooks, write_contents
 
-Use --scm-id 138447 with create-missing-configs to reuse this token.
+Use --scm-id 138447 to reuse this token with create-config or create-missing-configs.
 ```
 
 **Step 2: Preview remaining orgs**
@@ -159,6 +159,13 @@ uv run semgrep-scm-util ghes create-missing-configs --ghes-url https://github.ex
 ```bash
 uv run semgrep-scm-util ghes create-missing-configs --ghes-url https://github.example.com \
   --scm-id 138447 --subscribe --auto-scan --diff-enabled
+```
+
+You can also use `--scm-id` with `create-config` when adding individual orgs later:
+
+```bash
+uv run semgrep-scm-util ghes create-config --ghes-url https://github.example.com \
+  --ghes-org another-org --scm-id 138447 --subscribe --auto-scan --diff-enabled
 ```
 
 #### Creating configs for specific orgs
@@ -181,7 +188,7 @@ uv run semgrep-scm-util ghes create-missing-configs --ghes-url https://github.ex
 | `--subscribe` | disabled | Subscribe to webhooks |
 | `--auto-scan` | disabled | Enable auto-scanning |
 | `--diff-enabled` | disabled | Enable diff scanning |
-| `--scm-id` | - | Reuse token from an existing SCM config (create-missing-configs only) |
+| `--scm-id` | - | Reuse token from an existing SCM config (for creating configs only) |
 | `--orgs` | all missing | Specific orgs to create (create-missing-configs only) |
 | `--orgs-file` | - | File with org names, one per line (create-missing-configs only) |
 | `--delay` | 1.0 | Seconds between creating each config (create-missing-configs only) |

@@ -174,8 +174,8 @@ def cmd_scm_list_missing_configs(args: argparse.Namespace) -> None:
 def cmd_scm_create_config(args: argparse.Namespace) -> None:
     """Create a single Semgrep SCM config for one GHES org."""
     semgrep_token = get_env_or_exit("SEMGREP_APP_TOKEN")
-    if not args.ghes_token:
-        print("Error: GHES token is required. Use --ghes-token or set GHES_TOKEN env var.", file=sys.stderr)
+    if not args.ghes_token and not args.scm_id:
+        print("Error: You must provide a GHES token. Use --ghes-token (or GHES_TOKEN env var) or --scm-id.", file=sys.stderr)
         sys.exit(1)
 
     print(f"GHES: {args.ghes_url}")
@@ -186,6 +186,8 @@ def cmd_scm_create_config(args: argparse.Namespace) -> None:
         print(f"  {args.ghes_org}")
         print(f"      Type: {ScmType.GITHUB_ENTERPRISE.value}")
         print(f"      URL: {args.ghes_url}")
+        if args.scm_id:
+            print(f"      Token from SCM ID: {args.scm_id}")
         print(f"      Subscribe: {args.subscribe}")
         print(f"      Auto-scan: {args.auto_scan}")
         print(f"      Diff-enabled: {args.diff_enabled}")
@@ -194,15 +196,26 @@ def cmd_scm_create_config(args: argparse.Namespace) -> None:
     semgrep_client = SemgrepClient(semgrep_token)
 
     try:
-        config = semgrep_client.create_scm_config(
-            scm_type=ScmType.GITHUB_ENTERPRISE,
-            namespace=args.ghes_org,
-            base_url=args.ghes_url,
-            access_token=args.ghes_token,
-            subscribe=args.subscribe,
-            auto_scan=args.auto_scan,
-            diff_enabled=args.diff_enabled,
-        )
+        if args.scm_id:
+            config = semgrep_client.create_scm_config(
+                scm_type=ScmType.GITHUB_ENTERPRISE,
+                namespace=args.ghes_org,
+                base_url=args.ghes_url,
+                scm_config_id=args.scm_id,
+                subscribe=args.subscribe,
+                auto_scan=args.auto_scan,
+                diff_enabled=args.diff_enabled,
+            )
+        else:
+            config = semgrep_client.create_scm_config(
+                scm_type=ScmType.GITHUB_ENTERPRISE,
+                namespace=args.ghes_org,
+                base_url=args.ghes_url,
+                access_token=args.ghes_token,
+                subscribe=args.subscribe,
+                auto_scan=args.auto_scan,
+                diff_enabled=args.diff_enabled,
+            )
         print(f"Created SCM config for {args.ghes_org}")
         print(f"  SCM ID: {config.scm_id}")
 
@@ -226,7 +239,7 @@ def cmd_scm_create_config(args: argparse.Namespace) -> None:
             print(f"  Warning: Could not check health: {e}")
 
         print()
-        print(f"Use --scm-id {config.scm_id} with create-missing-configs to reuse this token.")
+        print(f"Use --scm-id {config.scm_id} to reuse this token with create-config or create-missing-configs.")
 
     except Exception as e:
         print(f"Failed to create config: {e}", file=sys.stderr)
@@ -1430,6 +1443,12 @@ def main():
         required=True,
         metavar="ORG",
         help="Organization name to create config for.",
+    )
+    ghes_create_config.add_argument(
+        "--scm-id",
+        type=int,
+        metavar="ID",
+        help="SCM ID of an existing config to reuse token from (alternative to --ghes-token).",
     )
     ghes_create_config.add_argument(
         "--dry-run",
