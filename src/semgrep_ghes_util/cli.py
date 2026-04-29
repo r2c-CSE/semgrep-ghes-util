@@ -95,6 +95,8 @@ def cmd_scm_list_configs(args: argparse.Namespace) -> None:
         if config.base_url:
             print(f"      URL: {config.base_url}")
         print(f"      ID: {config.id}")
+        if config.scm_id is not None:
+            print(f"      SCM ID: {config.scm_id}")
         if not meets_reqs:
             if config.status and config.status.error:
                 print(f"      Error: {config.status.error}")
@@ -1500,7 +1502,7 @@ def main():
         "--scm-id",
         type=int,
         metavar="ID",
-        help="SCM ID of an existing config to reuse token from. Get this from 'ghes create-config'.",
+        help="SCM ID of an existing config to reuse token from. Get this from 'ghes list-configs' or 'ghes create-config'.",
     )
     ghes_create_missing.add_argument(
         "--dry-run",
