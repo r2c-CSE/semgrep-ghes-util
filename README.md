@@ -50,16 +50,16 @@ uv run semgrep-scm-util ghes list-missing-configs --ghes-url https://github.exam
 Example `list-configs` output:
 
 ```
-Found 2 SCM config(s):
+Found 1 SCM config(s):
 
   [✓] my-org
       Type: SCM_TYPE_GITHUB_ENTERPRISE
       URL: https://github.example.com
-      ID: 1a2b3c4d-...
+      ID: 23456
       SCM ID: 138447
 ```
 
-The `SCM ID` is what you pass to `--scm-id` on `create-missing-configs` to reuse an existing config's token.
+The `SCM ID` can be passed to `--scm-id` on `create-config` or `create-missing-configs` to reuse an existing config's token.
 
 **list-configs flags:**
 
