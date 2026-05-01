@@ -19,7 +19,7 @@ class SemgrepApiError(Exception):
 def create_retry_session(
     retries: int = 5,
     backoff_factor: float = 0.5,
-    status_forcelist: tuple[int, ...] = (500, 502, 503, 504),
+    status_forcelist: tuple[int, ...] = (502, 503, 504),
 ) -> requests.Session:
     """Create a requests session with retry logic.
 
