@@ -50,6 +50,13 @@ def get_env_or_exit(var_name: str) -> str:
     return value
 
 
+def _strip_trailing_slash(value: str | None) -> str | None:
+    """Strip a trailing slash from a URL so equality checks normalize."""
+    if value is None:
+        return None
+    return value.rstrip("/")
+
+
 # SCM commands
 def cmd_scm_list_configs(args: argparse.Namespace) -> None:
     """List all Semgrep SCM configs."""
@@ -1385,9 +1392,10 @@ def main():
     def add_ghes_url_arg(subparser: argparse.ArgumentParser, required: bool = True) -> None:
         subparser.add_argument(
             "--ghes-url",
-            default=os.environ.get("GHES_URL"),
+            default=_strip_trailing_slash(os.environ.get("GHES_URL")),
             required=required and not os.environ.get("GHES_URL"),
             metavar="URL",
+            type=_strip_trailing_slash,
             help="GitHub Enterprise Server URL (e.g., https://github.example.com). Can also be set via GHES_URL env var.",
         )
 
@@ -1768,9 +1776,10 @@ def main():
     def add_glsm_url_arg(subparser: argparse.ArgumentParser, required: bool = True) -> None:
         subparser.add_argument(
             "--glsm-url",
-            default=os.environ.get("GLSM_URL"),
+            default=_strip_trailing_slash(os.environ.get("GLSM_URL")),
             required=required and not os.environ.get("GLSM_URL"),
             metavar="URL",
+            type=_strip_trailing_slash,
             help="GitLab Self-Managed URL (e.g., https://gitlab.example.com). Can also be set via GLSM_URL env var.",
         )
 
