@@ -8,6 +8,14 @@ For GHES, also discovers orgs/groups not yet onboarded to Semgrep and onboards t
 
 Requires Python 3.12+ and [uv](https://github.com/astral-sh/uv).
 
+For production use:
+
+```bash
+uv sync --no-dev --frozen
+```
+
+For development (includes `pytest` and other dev tooling):
+
 ```bash
 uv sync
 ```
